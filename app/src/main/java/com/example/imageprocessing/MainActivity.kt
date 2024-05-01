@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.*
 import android.icu.text.SimpleDateFormat
+import android.location.Geocoder
 import android.location.LocationManager
 import android.media.MediaScannerConnection
 import android.os.Bundle
@@ -101,14 +102,36 @@ class MainActivity : AppCompatActivity() {
         val mutableBitmap = imageBitmap.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(mutableBitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        paint.color = Color.BLACK
+
+        // Calculate brightness of the right bottom quadrant
+        val rightBottomBitmap = Bitmap.createBitmap(mutableBitmap, mutableBitmap.width / 2, mutableBitmap.height / 2, mutableBitmap.width / 2, mutableBitmap.height / 2)
+        val quadrantBrightness = calculateBrightness(rightBottomBitmap)
+
+        // Determine text color based on brightness
+        val textColor = if (quadrantBrightness < 128) Color.WHITE else Color.BLACK
+
+        paint.color = textColor
         paint.textSize = 8f // Adjust font size as needed
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) // Adjust font style as needed
 
         // Retrieve location data
         val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-        val locationText = "Location: ${location?.latitude}, ${location?.longitude}"
+        val geocoder = Geocoder(this, Locale.getDefault())
+        var locationName = ""
+        try {
+            val addresses = geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
+            if (addresses.isNotEmpty()) {
+                val address = addresses[0]
+                val province = address.adminArea ?: ""
+                val district = address.subAdminArea ?: ""
+                locationName = "$province, $district"
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+
+        val locationText = "Location: $locationName"
 
         // Retrieve time data
         val currentTime = Calendar.getInstance().time
@@ -130,6 +153,21 @@ class MainActivity : AppCompatActivity() {
 
         return mutableBitmap
     }
+
+    private fun calculateBrightness(bitmap: Bitmap): Int {
+        var brightness = 0
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                val pixel = bitmap.getPixel(x, y)
+                val r = Color.red(pixel)
+                val g = Color.green(pixel)
+                val b = Color.blue(pixel)
+                brightness += (0.299 * r + 0.587 * g + 0.114 * b).toInt()
+            }
+        }
+        return brightness / (bitmap.width * bitmap.height)
+    }
+
 
 
     private fun requestCameraPermission() {
